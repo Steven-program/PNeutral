@@ -1,0 +1,4 @@
+/.DS_Store
+/sentiment_analysis_model.h5
+/tokenizer.pickle
+/tripadvisor_hotel_reviews.csv
