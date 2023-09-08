@@ -2,57 +2,66 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.layers import Embedding, Conv1D, GlobalMaxPooling1D, Dense, Dropout
-from tensorflow.keras import losses
+from nltk.tokenize import word_tokenize
+from collections import defaultdict 
 
 df = pd.read_csv('tripadvisor_hotel_reviews.csv')
-print(df.head())
+df = df.head(1000)
 
 df = df[['Review', 'Rating']]
-def is_good_review(x_stars):
-    if(x_stars >3):
-        return 'positive'
-    else:
-        return 'negative'
-df['is_good_review'] = df['Rating'].apply(is_good_review)
+def positive(x_stars):
+    return (x_stars > 3)
+df['positive'] = df['Rating'].apply(positive)
 
-df = df[['Review', 'is_good_review']]
-df = df.sample(frac=1).reset_index(drop=True)
+reviews = df['Review']
+sentiment = df['positive']
 
-tokenizer = Tokenizer(num_words=5000, oov_token='<OOV>')
-tokenizer.fit_on_texts(df['Review'])
-word_index = tokenizer.word_index
-sequences = tokenizer.texts_to_sequences(df['Review'])
-padded_sequences = pad_sequences(sequences, maxlen=100, truncating='post')
-
-sentiment_labels = pd.get_dummies(df['is_good_review']).values
-x_train, x_test, y_train, y_test = train_test_split(padded_sequences, sentiment_labels, test_size=0.2)
-
-
-model = tf.keras.Sequential([
-    (Embedding(5000, 100, input_length=100)),
-    (Conv1D(64, 5, activation='relu')),
-    (GlobalMaxPooling1D()),
-    (Dense(32, activation='relu')),
-    (Dropout(0.5)),
-    (Dense(3, activation='softmax')),
+#implement bag of words algorithm
     
-])
+sentences = []
+vocab = []
+for sent in reviews:
+        x = word_tokenize(sent)
+        sentence = [w.lower() for w in x if w.isalpha() ]
+        sentences.append(sentence)
+        for word in sentence:
+            if word not in vocab:
+                vocab.append(word)
+    
+index_word = {}
+i = 0
+for word in vocab:
+    index_word[word] = i 
+    i += 1
 
-model.compile(loss=losses.BinaryCrossentropy(from_logits=True),
-              optimizer='adam',
-              metrics=tf.metrics.BinaryAccuracy(threshold=0.0))
-model.summary()
+def bag_of_words(sent):
+    count_dict = defaultdict(int)
+    vec = np.zeros(len(vocab))
+    for item in sent:
+        count_dict[item] += 1
+    for key,item in count_dict.items():
+        vec[index_word[key]] = item
+    return vec 
 
-model.fit(x_train, y_train, epochs=10, batch_size=32, validation_data=(x_test, y_test))
+##############################
 
-y_pred = np.argmax(model.predict(x_test), axis=-1)
-print("Accuracy:", accuracy_score(np.argmax(y_test, axis=-1), y_pred))
+word2vec = []
+for sentence in sentences:
+     review_vec = bag_of_words(sentence)
+     word2vec.append(review_vec)
+word2vec = np.array(word2vec)
 
-model.save('sentiment_analysis_model.h5')
+print("implementing logistic regression here")
+w2v_model = LogisticRegression()
+X_train_word2vec, X_test_word2vec, y_train_word2vec, y_test_word2vec = train_test_split(word2vec, sentiment, test_size=0.2, random_state=101)
+w2v_model.fit(X_train_word2vec, y_train_word2vec)
+
+w2v_preds = w2v_model.predict(X_test_word2vec) 
+accuracy = accuracy_score(y_test_word2vec, w2v_preds)
+
+print(accuracy)
 
 #with open('tokenizer.pickle', 'wb') as handle:
 #   pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
